@@ -1,49 +1,84 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
 var app = {
-    // Application Constructor
-    initialize: function() {
-        this.bindEvents();
-    },
-    // Bind Event Listeners
-    //
-    // Bind any events that are required on startup. Common events are:
-    // 'load', 'deviceready', 'offline', and 'online'.
-    bindEvents: function() {
-        document.addEventListener('deviceready', this.onDeviceReady, false);
-    },
-    // deviceready Event Handler
-    //
-    // The scope of 'this' is the event. In order to call the 'receivedEvent'
-    // function, we must explicity call 'app.receivedEvent(...);'
-    onDeviceReady: function() {
-        app.receivedEvent('deviceready');
-    },
-    // Update DOM on a Received Event
-    receivedEvent: function(id) {
-        var parentElement = document.getElementById(id);
-        var listeningElement = parentElement.querySelector('.listening');
-        var receivedElement = parentElement.querySelector('.received');
+  INITIAL_TIMEOUT: 60, // 60 seconds
+  EXTENDED_TIMEOUT: 90, // 90 seconds
+  PERMITTED_DELTA: 10,
 
-        listeningElement.setAttribute('style', 'display:none;');
-        receivedElement.setAttribute('style', 'display:block;');
+  count: 0,
+  timerExtended: false,
+  startTime: null,
+  lastBreathCount: null,
 
-        console.log('Received Event: ' + id);
-    }
+  initialize: function() {
+    this.bindEvents();
+  },
+
+  bindEvents: function() {
+    $(document).on('deviceready', this.onDeviceReady);
+  },
+
+  onDeviceReady: function() {
+    app.$start = $('#start');
+    app.$progress = $('#progress');
+    app.$results = $('#results');
+    app.$resultsBody = $('#results tbody');
+    app.$start.on('touchstart', app.start);
+    $('#restart-counting').on('touchstart', function(){
+      window.location.reload();
+    });
+  },
+
+  start: function(){
+    app.$start.toggleClass('hide');
+    app.startTime = (+new Date) / 1000;
+    app.$progress.toggleClass('hide').on('touchstart', app.record);
+    app.timer = setTimeout(app.displayResults, app.INITIAL_TIMEOUT * 1000);
+  },
+
+  displayResults: function(){
+    app.$progress.unbind('touchstart', app.record).toggleClass('hide');
+    app.$results.toggleClass('hide');
+  },
+
+  elapsedTime: function(){
+    return ((+new Date) / 1000) - app.startTime;
+  },
+
+  computeDelta: function(x, y){
+    return Math.abs(((x - y)/((x + y) / 2) * 100)).toFixed(1);
+  },
+
+  extendTimer: function(elapsedTime){
+    clearTimeout(app.timer);
+    app.timer = setTimeout(app.displayResults, (app.EXTENDED_TIMEOUT - elapsedTime) * 1000);
+    app.timerExtended = true;
+  },
+
+  deltaError: function(elapsedTime){
+    if (app.timerExtended)
+      app.reset();
+    else
+      app.extendTimer(elapsedTime);
+  },
+
+  record: function(){
+    var elapsedTime = app.elapsedTime(),
+        breathCount = (app.count/elapsedTime) * 60,
+        delta = app.lastBreathCount ? app.computeDelta(app.lastBreathCount, breathCount) : 0,
+        html = $('<tr><td>'+ elapsedTime.toFixed(1) +'</td><td>'+ breathCount.toFixed(1) +'</td><td>'+ delta +'</td></tr>');
+
+    ++app.count;
+
+    if (delta > app.PERMITTED_DELTA) {
+      html.addClass('danger');
+      app.deltaError(elapsedTime);
+    };
+
+    app.$resultsBody.append(html);
+    app.lastBreathCount = breathCount;
+  },
+
+  reset: function(){
+    $('#recount-message').removeClass('hide');
+    app.displayResults();
+  }
 };
